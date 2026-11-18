@@ -18,6 +18,9 @@ hd2d-mvp/assets/**/*.glb
 hd2d-mvp/assets/**/*.bin
 hd2d-mvp/assets/**/*.mp3
 hd2d-mvp/desktop/build/*.png
+# The Linux desktop icon is a build input (electron-builder needs it), so it is committed.
+!hd2d-mvp/desktop/build/icon.png
 hd2d-mvp/desktop/build/*.icns
 hd2d-mvp/desktop/build/*.ico
+hd2d-mvp/desktop/.webp-cache/
 /ASSETS-README.txt

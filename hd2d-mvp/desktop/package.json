@@ -9,7 +9,9 @@
     "smoke": "electron . --smoke=smoke",
     "dist:win": "node build-app.mjs && electron-builder --win zip --x64",
     "dist:dir": "node build-app.mjs && electron-builder --mac dir",
-    "dist:mac": "node build-app.mjs && electron-builder --mac dmg --arm64 --x64"
+    "dist:mac": "node build-app.mjs && electron-builder --mac dmg --arm64 --x64",
+    "dist:linux": "node build-app.mjs && electron-builder --linux AppImage tar.gz --x64",
+    "dist:linux:dir": "node build-app.mjs && electron-builder --linux dir --x64"
   },
   "devDependencies": {
     "@fontsource/ma-shan-zheng": "5.3.1",
@@ -20,6 +22,7 @@
     "three": "0.170.0"
   },
   "productName": "Three Kingdoms HD-2D",
+  "desktopName": "threekindoms.desktop",
   "private": true,
   "build": {
     "appId": "io.github.tianlin.threekindoms",
@@ -69,6 +72,36 @@
     },
     "dmg": {
       "title": "${productName} ${version}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Game",
+      "executableName": "threekindoms",
+      "artifactName": "threekindoms-${version}-linux-${arch}.${ext}",
+      "synopsis": "三国 HD-2D 回合制战略游戏",
+      "description": "三国题材回合制战略游戏的 HD-2D 重制，非官方同人作品。",
+      "desktop": {
+        "entry": {
+          "Name": "Three Kingdoms HD-2D",
+          "Comment": "三国 HD-2D 回合制战略游戏",
+          "Categories": "Game;StrategyGame;"
+        }
+      },
+      "syncDesktopName": true
     },
     "afterPack": "build/after-pack.cjs"
   },

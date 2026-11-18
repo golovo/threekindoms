@@ -81,16 +81,32 @@ node --test --test-concurrency=1 'hd2d-mvp/tests/*.test.mjs'     # 全部测试�
 
 ## 打包桌面版
 
-需要 `cwebp`（macOS 上用 `brew install webp` 安装）。
+需要 `cwebp`（macOS 上用 `brew install webp` 安装，Fedora 上用 `sudo dnf install libwebp-tools`）。
 
 ```bash
 npm --prefix hd2d-mvp/desktop run dist:mac    # macOS dmg（arm64 与 x64）
 npm --prefix hd2d-mvp/desktop run dist:win    # Windows x64 zip
+npm --prefix hd2d-mvp/desktop run dist:linux  # Linux AppImage 与 tar.gz（在 Linux 上构建）
 npm --prefix hd2d-mvp/desktop run dist:dir    # 只出 macOS 的 .app 目录，最快
 npm --prefix hd2d-mvp/desktop start           # 直接用 Electron 运行游戏（需要先执行一次 build-app）
 ```
 
 这几个命令都会先运行 `build-app.mjs`，把游戏快照到 `hd2d-mvp/desktop/app/`，产物放在 `hd2d-mvp/desktop/release/`。
+
+### Linux（Fedora 等）
+
+```bash
+sudo dnf install libwebp-tools nodejs python3
+npm --prefix hd2d-mvp/desktop install
+npm --prefix hd2d-mvp/desktop run dist:linux
+```
+
+产物有两个，都不需要 root：
+
+- `threekindoms-<版本>-linux-x86_64.AppImage`：单文件，`chmod +x` 后双击或直接运行。Fedora 上如果提示找不到 `libfuse.so.2`，先 `sudo dnf install fuse-libs`，或者改用 `./threekindoms-*.AppImage --appimage-extract-and-run` 免挂载运行。
+- `threekindoms-<版本>-linux-x64.tar.gz`：解压到任意目录，运行里面的 `threekindoms`，完全不依赖 FUSE。
+
+游戏存档、窗口位置和启动日志在 `~/.config/Three Kingdoms HD-2D/`。AppImage 由 electron-builder 启动时自带 `--no-sandbox`（AppImage 内无法保留 setuid 沙箱）；tar.gz 版则由系统决定，遇到沙箱报错同样可以加 `--no-sandbox`。
 
 ## 许可
 

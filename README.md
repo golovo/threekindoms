@@ -70,6 +70,15 @@ python3 hd2d-mvp/tools/serve.py 8677      # 启动开发服务器
 
 背景音乐来自上面的 Remix 音乐包。没解压音乐包时，只有战略、战争、白兵三处有代码实时合成的简易替代音乐，其他场景是静音的。音效使用素材包里的文件。
 
+## 诊断日志（桌面版）
+
+桌面版把运行记录写在 `~/.config/Three Kingdoms HD-2D/logs/`（Windows 在 `%APPDATA%\Three Kingdoms HD-2D\logs\`）：
+
+- `startup.log`：启动过程、缺失文件、页面报错。
+- `game.log`：游戏内时间线——界面、年月、回合、对话框、帧计数、长任务、显存/内存；主进程每两秒探活，主线程被卡住或画面不再出帧时写下 `[stall]`，AI 回合或淡入卡住时写下 `[softlock]`。跨启动追加，超过 8 MB 时轮转为 `game.prev.log`。
+
+遇到卡死、黑屏或无响应，请在游戏里打开「☰ 系统 → 说明 → 打开日志文件夹」，把 `game.log` 和 `startup.log` 一起发来；两份记录能说明卡住时在哪个画面、哪一月、谁的回合，以及最后几秒发生了什么。
+
 ## 测试
 
 浏览器测试用 Playwright 驱动本机 Chrome 的无头模式，需要先装 Playwright（`npm i -g playwright`）和 Google Chrome。

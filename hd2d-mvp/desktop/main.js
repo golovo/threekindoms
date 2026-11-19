@@ -3,8 +3,8 @@
 // in the user's profile across reinstalls. F11 toggles fullscreen, Alt+Enter too, and so does 系统 → 全屏 in the game,
 // which also has 退出游戏: preload.js is what the page may ask of the window.
 //   --smoke=<dir>  load, screenshot, log console errors and missing files to <dir>, then quit (for CI / checks)
-const { app, BrowserWindow, Menu, crashReporter, dialog, ipcMain, net, protocol, screen, shell } = require('electron');
-const { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } = require('node:fs');
+const { app, BrowserWindow, Menu, crashReporter, dialog, ipcMain, net, powerMonitor, protocol, screen, shell } = require('electron');
+const { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -51,6 +51,47 @@ const log = (line) => {
   if (!logFile || logLines > 500) return; // a page that repeats an error must not fill the disk
   try { appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`); logLines++; } catch { /* nothing more can be done */ }
 };
+
+// The diagnostic record for freeze reports (src/diag.js in the page, through preload.js): game.log beside
+// startup.log, appended across runs so a freeze survives the restart it forces, and rotated only past 8 MB.
+// The page's own timeline says what was on screen when its frames stopped; the shell's watchdog below says
+// when the page stopped answering at all.
+const logDir = logFile ? path.dirname(logFile) : null;
+const diagFile = logDir ? path.join(logDir, 'game.log') : null;
+let diagBytes = 0;
+function rotateDiag() {
+  if (!diagFile) return;
+  try {
+    if (existsSync(diagFile) && statSync(diagFile).size > 8 * 2 ** 20) {
+      const old = path.join(logDir, 'game.prev.log');
+      if (existsSync(old)) unlinkSync(old);
+      renameSync(diagFile, old);
+    }
+  } catch { /* the next line can still be written */ }
+  try { diagBytes = existsSync(diagFile) ? statSync(diagFile).size : 0; } catch { diagBytes = 0; }
+}
+function diagLine(text) {
+  if (!diagFile) return;
+  try {
+    const line = `${text}\n`;
+    appendFileSync(diagFile, line);
+    diagBytes += Buffer.byteLength(line);
+    if (diagBytes > 8 * 2 ** 20) rotateDiag();
+  } catch { /* a profile that cannot be written is already reported by startup.log */ }
+}
+const diag = (text) => diagLine(`${new Date().toISOString()} ${text}`);
+rotateDiag();
+// The page sends { t, k, d } lines in batches (src/diag.js). One bad line must not cost the rest.
+ipcMain.on('diag:log', (_e, lines) => {
+  if (!Array.isArray(lines)) return;
+  for (const l of lines.slice(0, 200)) {
+    const at = Number.isFinite(l?.t) ? new Date(l.t).toISOString() : new Date().toISOString();
+    let body = '';
+    try { body = l?.d == null ? '' : (typeof l.d === 'string' ? l.d : JSON.stringify(l.d)); } catch { body = '<unserialisable>'; }
+    diagLine(`${at} [page] ${String(l?.k || '?')} ${body.length > 3000 ? `${body.slice(0, 3000)}…` : body}`);
+  }
+});
+ipcMain.on('desktop:logs', () => { if (logDir) shell.openPath(logDir); });
 // Tells the player once what failed and where the record is (AGENTS.md: never a silent black window), and opens its folder.
 let told = false;
 function fail(what, detail = '') {
@@ -68,6 +109,7 @@ process.on('unhandledRejection', (err) => log(`unhandled rejection: ${err?.stack
 
 let buildCommit = 'unknown';
 try { buildCommit = JSON.parse(readFileSync(path.join(ROOT, 'build.json'), 'utf8')).commit; } catch { /* reported below by the missing files */ }
+diag(`[session] start ${app.getVersion()} (${buildCommit}) electron ${process.versions.electron} chrome ${process.versions.chrome} ${process.platform} ${process.arch} ${os.release()}`);
 log(`start ${app.getVersion()} (${buildCommit}) electron ${process.versions.electron} chrome ${process.versions.chrome} ${process.platform} ${process.arch} ${os.release()} packaged=${app.isPackaged}`);
 log(`exe ${process.execPath}`);
 log(`cpu ${os.cpus()[0]?.model} x${os.cpus().length}, memory ${Math.round(os.totalmem() / 2 ** 20)} MB`);
@@ -132,14 +174,14 @@ function watchPage(win) {
   const wc = win.webContents, t0 = Date.now(), secs = () => (Date.now() - t0) / 1000;
   let up = false;
   win.once('ready-to-show', () => log(`window ready after ${secs()}s`));
-  win.on('unresponsive', () => log('window unresponsive'));
-  win.on('responsive', () => log('window responsive again'));
+  win.on('unresponsive', () => { log('window unresponsive'); diag('[window] unresponsive (Chromium: no answer for 30 s)'); });
+  win.on('responsive', () => { log('window responsive again'); diag('[window] responsive again'); });
   wc.on('did-finish-load', () => log(`page loaded after ${secs()}s`));
   wc.on('did-fail-load', (_e, code, desc, url, isMain) => {
     log(`load failed ${code} ${desc} ${url}`);
     if (isMain) fail('游戏页面加载失败', `${desc} (${code})`);
   });
-  wc.on('render-process-gone', (_e, d) => { if (d.reason !== 'clean-exit') fail('游戏页面进程意外退出', `${d.reason} (退出码 ${d.exitCode})`); });
+  wc.on('render-process-gone', (_e, d) => { diag(`[window] renderer gone ${d.reason} exit=${d.exitCode}`); if (d.reason !== 'clean-exit') fail('游戏页面进程意外退出', `${d.reason} (退出码 ${d.exitCode})`); });
   wc.on('console-message', (e) => {
     if (e.level !== 'error' && e.level !== 'warning') return;
     log(`page ${e.level}: ${e.message} (${e.sourceId}:${e.lineNumber})`);
@@ -238,9 +280,64 @@ function createWindow() {
   // No back or forward in a game window: a mouse's side button, a swipe or Alt+← would otherwise leave an unsaved
   // game for the page before it (the save editor). The pages swallow the side buttons too (src/ui.js).
   win.webContents.on('did-navigate', () => win.webContents.navigationHistory?.clear());
+  // Window state is half of a freeze report: a game left running behind another window, or a window hidden by
+  // the compositor, behaves differently from one in front. Both records go to game.log.
+  for (const [ev, text] of [['focus', 'focus'], ['blur', 'blur'], ['minimize', 'minimize'], ['restore', 'restore'], ['show', 'show'], ['hide', 'hide']]) {
+    win.on(ev, () => diag(`[window] ${text}`));
+  }
   watchPage(win);
+  watchDiag(win);
   win.loadURL(`${ORIGIN}/index.html`).catch(() => {}); // did-fail-load has already told it
   return win;
+}
+
+// The shell's half of the record. Every two seconds the page is asked for its snapshot through the preload's
+// `window.__diag`. No answer inside four seconds is a page whose main thread is blocked; an answer whose frame
+// count has stopped moving is a page that still runs but no longer draws (the GPU, or a frame loop that died).
+// Both are written with the last snapshot known, which is what the player saw when it happened.
+function watchDiag(win) {
+  const wc = win.webContents;
+  let last = null, lastKey = '', lastStall = 0, lastBeat = 0, lastGpu = '', misses = 0;
+  const timer = setInterval(async () => {
+    if (win.isDestroyed() || wc.isDestroyed()) return clearInterval(timer);
+    const t0 = Date.now();
+    let s;
+    try {
+      s = await Promise.race([
+        wc.executeJavaScript('window.__diag && window.__diag.snapshot()'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('probe timeout')), 8000)),
+      ]);
+    } catch {
+      // One missed probe can be a long frame on a slow or software-rendered machine (a frame here may take
+      // seconds); two in a row, with the page still not answering, is a main thread that has stopped.
+      misses++;
+      if (misses >= 2 && Date.now() - lastStall > 10000) {
+        lastStall = Date.now();
+        diag(`[stall] renderer missed ${misses} probes of 8 s; last ${JSON.stringify(last)}`);
+      }
+      return;
+    }
+    misses = 0;
+    if (!s) return;
+    const key = JSON.stringify([s.screen, s.g?.year, s.g?.month, s.g?.turn, s.g?.books, s.g?.over, s.dialogs, s.hidden, s.focus]);
+    if (key !== lastKey) { lastKey = key; diag(`[state] ${key}`); }
+    // Only while the player has the window in front: a background window may stop drawing by design.
+    if (s.sinceFrame > 5000 && s.focus && !s.hidden && Date.now() - lastStall > 5000) {
+      lastStall = Date.now();
+      diag(`[stall] no frame for ${s.sinceFrame} ms; ${JSON.stringify(s)}`);
+    }
+    last = s;
+    if (Date.now() - lastBeat > 30000) {
+      lastBeat = Date.now();
+      let mem = '';
+      try { mem = app.getAppMetrics().map((m) => `${m.type}:${Math.round((m.memory?.workingSetSize || 0) / 1024)}MB`).join(' '); } catch { /* older Electron */ }
+      diag(`[beat] screen=${s.screen} frames=${s.frames} drawn=${s.drawn} memMB=${s.memMB} rss ${mem}`);
+      try {
+        const gpu = JSON.stringify(app.getGPUFeatureStatus());
+        if (gpu !== lastGpu) { lastGpu = gpu; diag(`[gpu] ${gpu}`); }
+      } catch { /* no GPU info */ }
+    }
+  }, 2000);
 }
 
 async function smoke(win) {
@@ -301,15 +398,22 @@ async function smoke(win) {
 // No menu bar. On a Mac that would also take ⌘Q away, so the application menu keeps the one item.
 const appMenu = () => (process.platform === 'darwin' ? Menu.buildFromTemplate([{ label: app.name, submenu: [{ role: 'quit', label: '退出游戏' }] }]) : null);
 if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
-app.on('child-process-gone', (_e, d) => log(`child process gone: ${d.type} ${d.reason} (exit ${d.exitCode})`)); // the GPU process among them
+app.on('child-process-gone', (_e, d) => { log(`child process gone: ${d.type} ${d.reason} (exit ${d.exitCode})`); diag(`[window] child process gone ${d.type} ${d.reason} exit=${d.exitCode}`); }); // the GPU process among them
 app.whenReady().then(() => {
   log('app ready');
   if (!existsSync(path.join(ROOT, 'index.html'))) { fail('游戏文件不完整', '找不到游戏页面。请把压缩包完整解压后，再运行解压目录里的程序。'); return app.exit(1); }
   app.getGPUInfo('basic').then((info) => log(`gpu ${JSON.stringify(info.gpuDevice)} features ${JSON.stringify(app.getGPUFeatureStatus())}`), (err) => log(`gpu info: ${err}`));
   protocol.handle('app', serve);
   if (process.platform === 'darwin') Menu.setApplicationMenu(appMenu());
+  // Sleep, screen lock and display changes are the moments a GPU surface can come back lost: the freeze report
+  // needs to know which of them came before it.
+  for (const [ev, text] of [['suspend', 'suspend'], ['resume', 'resume'], ['lock-screen', 'lock-screen'], ['unlock-screen', 'unlock-screen']]) {
+    try { powerMonitor.on(ev, () => diag(`[system] ${text}`)); } catch { /* not on this platform */ }
+  }
+  try { screen.on('display-metrics-changed', () => diag('[system] display metrics changed')); } catch { /* no screens yet */ }
   const win = createWindow();
   log('window created');
   if (smokeDir) { mkdirSync(smokeDir, { recursive: true }); smoke(win); }
 });
+app.on('before-quit', () => diag('[session] quit'));
 app.on('window-all-closed', () => app.quit());

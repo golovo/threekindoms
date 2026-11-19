@@ -12,4 +12,8 @@ contextBridge.exposeInMainWorld('desktop', {
   setUnsaved: (on) => ipcRenderer.send('desktop:unsaved', !!on),
   // 退出游戏: the page has already asked the player, so this closes without asking again.
   quit: () => ipcRenderer.send('desktop:quit'),
+  // Diagnostic lines for game.log (src/diag.js): batched { t, k, d } records, written by main.js beside startup.log.
+  // Opening the folder is 说明 → 打开日志文件夹, so a player asked for the file can find it without a path.
+  diag: (lines) => ipcRenderer.send('diag:log', lines),
+  logs: () => ipcRenderer.send('desktop:logs'),
 });

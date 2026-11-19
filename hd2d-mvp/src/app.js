@@ -40,6 +40,9 @@ import { controls, quickSaveKey } from './controls.js';
 import { createPad, sendKey, walk, focusFirst, firstIn, focusables, isControl, shown, glyphOf } from './pad.js';
 import { fresh as freshInput, padPressed, GUARD } from './commitguard.js';
 import { PREF, readFlag, writeFlag, readPref, writePref } from './prefs.js';
+import { startDiag, frame as diagFrame, drawnFrame as diagDrawn, event as diagEvent } from './diag.js';
+
+startDiag(); // game.log: the timeline a freeze report is read against (src/diag.js, desktop/main.js)
 
 const { name, cityName, NONE } = G;
 const factionName = (f) => G.factionName(g, f);
@@ -852,23 +855,33 @@ const coveredFrameDue = () => {
   warmedUnder = key; return true;
 };
 renderer.setAnimationLoop((t) => {
-  if (!mode || !due(t, document.hidden ? 30 : undefined)) return;
-  const dt = Math.min(0.05, clock.getDelta());
-  if (held.size) { const v = dt * 14, k = (c) => (held.has(c) ? 1 : 0); mode.pan?.((k('d') - k('a')) * v, (k('s') - k('w')) * v); }
-  mode.update(dt); setProfile();
-  if (mode === war) warNav?.update(dt, { blocked: blocking() || dialogOpen() });
-  if (mode === war && ++insetTick % 15 === 0) frameWar();
-  if (mode === war && !war.flat) for (const el of $$('.unitacts')) el.place?.(false); // the 3D camera moves: the commands follow their general
-  if (mode === strategy && document.body.dataset.screen === 'title') strategy.orbit(-dt * 18, 0);
-  if (scenic && !scenicStillFits()) setScenic(false);
-  if (mode.flat || document.hidden) return; // the flat war map draws itself on its own canvas (src/warmap2d.js): no 3D frame at all
-  if (warming) return; // a scene's shaders compiling (prewarm): a frame now would wait for them on the main thread
-  if (!document.querySelector('.tt')) warmedUnder = '';
-  else if (!coveredFrameDue()) return;
-  const dof = mode.dof?.(); if (dof) post.setDof(dof);
-  mode.camera.updateMatrixWorld();
-  post.setFocus(-focusV.copy(mode.focusPoint()).applyMatrix4(mode.camera.matrixWorldInverse).z);
-  post.render(); labels.render(mode.scene, mode.camera);
+  diagFrame(t); // the page's own count: a loop that stops is what game.log must show (src/diag.js)
+  // three.js asks for the next frame only after this callback returns: one uncaught throw here freezes the
+  // picture for good, with the page, its menus and its music still alive. Keep the loop, record the throw with
+  // its stack (game.log), and let the next frame try again.
+  try {
+    if (!mode || !due(t, document.hidden ? 30 : undefined)) return;
+    const dt = Math.min(0.05, clock.getDelta());
+    if (held.size) { const v = dt * 14, k = (c) => (held.has(c) ? 1 : 0); mode.pan?.((k('d') - k('a')) * v, (k('s') - k('w')) * v); }
+    mode.update(dt); setProfile();
+    if (mode === war) warNav?.update(dt, { blocked: blocking() || dialogOpen() });
+    if (mode === war && ++insetTick % 15 === 0) frameWar();
+    if (mode === war && !war.flat) for (const el of $$('.unitacts')) el.place?.(false); // the 3D camera moves: the commands follow their general
+    if (mode === strategy && document.body.dataset.screen === 'title') strategy.orbit(-dt * 18, 0);
+    if (scenic && !scenicStillFits()) setScenic(false);
+    if (mode.flat || document.hidden) return; // the flat war map draws itself on its own canvas (src/warmap2d.js): no 3D frame at all
+    if (warming) return; // a scene's shaders compiling (prewarm): a frame now would wait for them on the main thread
+    if (!document.querySelector('.tt')) warmedUnder = '';
+    else if (!coveredFrameDue()) return;
+    const dof = mode.dof?.(); if (dof) post.setDof(dof);
+    mode.camera.updateMatrixWorld();
+    post.setFocus(-focusV.copy(mode.focusPoint()).applyMatrix4(mode.camera.matrixWorldInverse).z);
+    post.render(); labels.render(mode.scene, mode.camera);
+    diagDrawn();
+  } catch (err) {
+    diagEvent('frame-error', { message: String(err?.message || err), stack: String(err?.stack || '') });
+    console.error(err);
+  }
 });
 
 function help() {
@@ -887,8 +900,10 @@ function help() {
     h('p', {}, '两将相邻即进入单挑，我方武将单挑时可选择攻击、牵制、舍身、说得、骂倒或退却，也可查看资料；体力归零即阵亡。在单挑中斩杀君主有50%得到龙牙刀，全局只此一把；曹操、董卓、马腾、刘备各有专属宝物与条件。宝物只在单挑中斩杀时得到，白兵中击杀或对方退却都不会得到；宝物会替换胜者原有的装备。'),
     h('p', {}, `${FLAT_RULE}：用左键拖动平移、滚轮缩放，H不起作用。${WAR_RULE}；平面战场不能旋转与远近缩放。`),
     // What the help used to leave out (feedback R11, 2026-11-02) is in the 操作 page's 键鼠 tabs (src/controls.js).
-    h('p', {}, '节奏：电脑回合、AI之间的战争、计略与白兵默认按原版时长播放；「☰ 系统 → 游戏速度」可改为快速（2倍）或最快（4倍），演出中按 Enter／空格可跳过当前一段。')),
-  h('div', { class: 'foot' }, h('button', { class: 'btn primary', onclick: () => close(null) }, '关闭'))], { wide: true });
+    h('p', {}, '节奏：电脑回合、AI之间的战争、计略与白兵默认按原版时长播放；「☰ 系统 → 游戏速度」可改为快速（2倍）或最快（4倍），演出中按 Enter／空格可跳过当前一段。'),
+    window.desktop?.logs ? h('p', { class: 'hint' }, '卡死、无响应时，下面的「打开日志文件夹」里 game.log 与 startup.log 记着当时画面、回合和最后几秒的状态；反馈时请把这两个文件一起发来。') : null),
+  h('div', { class: 'foot' }, window.desktop?.logs ? h('button', { class: 'btn', onclick: () => window.desktop.logs() }, '打开日志文件夹') : null,
+    h('button', { class: 'btn primary', onclick: () => close(null) }, '关闭'))], { wide: true });
 }
 
 // ---------- Title ----------

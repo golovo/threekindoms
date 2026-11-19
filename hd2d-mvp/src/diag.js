@@ -14,6 +14,7 @@ let frames = 0, drawn = 0, lastFrame = 0, lastDrawn = 0;
 let queue = [], timer = null, dropped = 0;
 let ctxLost = false, started = false;
 let lastStateKey = '', lastStallAt = 0;
+let lastInput = 0, inputCount = 0, lastInputLog = 0;
 
 const iso = (t = Date.now()) => new Date(t).toISOString();
 const clip = (s, n = MAX_TEXT) => {
@@ -63,6 +64,10 @@ export function snapshot() {
     sinceDraw: lastDrawn ? Math.round(performance.now() - lastDrawn) : -1,
     hidden: !!document.hidden, focus: document.hasFocus(),
     aiTurn: !!document.querySelector('.aiturn'), fade: !!document.querySelector('#fade.on'),
+    vig: !!document.querySelector('.vig'), shade: !!document.querySelector('.shade, .mappick'),
+    // How long since any pointer press or key: a step that waits for input while input no longer arrives reads
+    // as a freeze, and this tells it apart from one that waits because nothing was pressed.
+    inputAge: lastInput ? Math.round(performance.now() - lastInput) : -1, inputs: inputCount,
     size: `${innerWidth}x${innerHeight}@${devicePixelRatio}`,
     memMB: heapMB(), ctxLost,
     g: g ? { year: g.year, month: (g.month ?? 0) + 1, turn: g.current, player: g.player, books: g.books, over: g.over?.type || null, war } : null,
@@ -92,13 +97,15 @@ let stateSince = Date.now(), lastSoft = 0;
 function poll() {
   try {
     const s = snapshot();
-    const key = JSON.stringify([s.screen, s.g?.year, s.g?.month, s.g?.turn, s.g?.books, s.g?.over, s.dialogs, s.hidden, s.focus]);
+    const key = JSON.stringify([s.screen, s.g?.year, s.g?.month, s.g?.turn, s.g?.books, s.g?.over, s.dialogs, s.hidden, s.focus, s.vig, s.shade]);
     if (key !== lastStateKey) { lastStateKey = key; stateSince = Date.now(); push('state', s); }
     // A screen that does not move while a step is up is the other kind of freeze: the page still draws (frames
     // go on), but the game is waiting on something that never finishes. Only a transient step counts — the map
     // itself may sit still for minutes while the player thinks.
     const held = Date.now() - stateSince;
-    if ((s.aiTurn && held > 45000) || (s.fade && held > 10000)) {
+    // A command show (src/vignette.js) left up is the step that froze the game on 2026-11-19; it closes by itself at
+    // 30 s, and this records the state shortly before that.
+    if ((s.aiTurn && held > 45000) || (s.fade && held > 10000) || (s.vig && held > 25000)) {
       if (Date.now() - lastSoft > 30000) { lastSoft = Date.now(); push('softlock', { held: Math.round(held / 1000), ...s }); }
     }
     // The page can still log when only its drawing has stopped (the GPU or the frame loop); say so, once per 5 s.
@@ -121,6 +128,22 @@ function wire() {
   addEventListener('unhandledrejection', (e) => push('reject', {
     reason: clip(e.reason?.stack || e.reason?.message || e.reason),
   }));
+  // Whether a press or a key reaches the page at all is what a freeze report needs first: while a step waits for
+  // input, each press is recorded (at most five a second) with where it landed and what is on top.
+  const noteInput = (kind, e) => {
+    lastInput = performance.now(); inputCount++;
+    if (performance.now() - lastInputLog < 200) return;
+    try {
+      const vig = !!document.querySelector('.vig'), shade = !!document.querySelector('.shade, .mappick');
+      if (!vig && !shade) return;
+      lastInputLog = performance.now();
+      push('input', { kind, key: kind === 'key' ? e.key : undefined, x: kind === 'pointer' ? Math.round(e.clientX) : undefined,
+        y: kind === 'pointer' ? Math.round(e.clientY) : undefined, target: clip(e.target?.className || e.target?.tagName, 60),
+        vig, shade, onTop: clip(document.elementFromPoint(e.clientX ?? 0, e.clientY ?? 0)?.className, 60) });
+    } catch { /* whatever went wrong, the input itself must go on */ }
+  };
+  addEventListener('pointerdown', (e) => noteInput('pointer', e), true);
+  addEventListener('keydown', (e) => noteInput('key', e), true);
   addEventListener('visibilitychange', () => push('visibility', { state: document.visibilityState, hidden: document.hidden }));
   addEventListener('focus', () => push('focus', {}));
   addEventListener('blur', () => push('blur', {}));

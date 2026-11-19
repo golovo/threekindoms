@@ -9,6 +9,7 @@
 import { h } from './ui.js';
 import { pacer } from './framecap.js';
 import { keyTaken, paced, paceSpeed, ORIGINAL } from './pace.js';
+import { event as diagEvent } from './diag.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let enabled = true;
@@ -136,6 +137,11 @@ export async function playVignette({ scene, caption, onBook, books = 1, onShow, 
   };
   box.addEventListener('click', () => (skip = true));
   if (onBook) { dim.style.pointerEvents = 'auto'; dim.addEventListener('click', () => (skip = true)); document.body.append(dim); } // from the book's blink on
+  // A press anywhere counts, taken on the window in the capture phase: a show left waiting because its own box or the
+  // dim did not get the click is a freeze the player cannot get out of (2026-11-19). The pointer that opened the show
+  // was dispatched before this listener existed.
+  const onDown = (e) => { if (e.button === undefined || e.button === 0) skip = true; };
+  addEventListener('pointerdown', onDown, true);
   addEventListener('keydown', onKey, true);
   const wait = async (ms) => { const t0 = performance.now(); while (!skip && performance.now() - t0 < ms) await sleep(30); };
 
@@ -156,6 +162,7 @@ export async function playVignette({ scene, caption, onBook, books = 1, onShow, 
 
   // 2. Stats wipe into the frame; 3. the scene loops while the result types out; 4. wipe back.
   document.body.append(dim, box); requestAnimationFrame(() => dim.classList.add('in'));
+  diagEvent('vig-open', { scene, cmd: !!onBook });
   const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
   // with a set duration the typing, beats and wipe all scale with it (the 游戏速度 divides the duration)
   const k = duration ? Math.min(1, duration / 3200) : 1, typing = cmd ? paced(ORIGINAL.typeChar) : 45 * k, out = 320 * (cmd ? 1 / paceSpeed() : k);
@@ -179,15 +186,21 @@ export async function playVignette({ scene, caption, onBook, books = 1, onShow, 
   if (cmd) {
     await wait(Math.max(0, paced(ORIGINAL.commandScene) - (performance.now() - t0)));
     cap.textContent = caption;
-    if (paceSpeed() === 1) { // the original leaves the result up until A / B
-      skip = false; box.append(h('span', { class: 'vig-more', 'aria-hidden': 'true' }, '▼'));
-      while (!skip) await sleep(30);
+    // The original leaves the result up until A / B. A press during the show already answered that, so it is not asked
+    // again (resetting `skip` swallowed the player's click and the show waited for a second one); and a show that gets
+    // no input at all closes by itself after half a minute, so no lost click can hold the game for good.
+    if (paceSpeed() === 1 && !skip) {
+      box.append(h('span', { class: 'vig-more', 'aria-hidden': 'true' }, '▼'), h('span', { class: 'vig-hint' }, '点击任意处 / Enter 继续'));
+      const waitFrom = performance.now();
+      while (!skip && performance.now() - waitFrom < 30000) await sleep(30);
+      if (!skip) { diagEvent('vig-timeout', { scene, waited: Math.round(performance.now() - waitFrom) }); }
     }
   } else await wait(duration ? Math.max(0, duration - out - (performance.now() - start)) : Math.max(900, 2300 - chars.length * 45));
   const wipe = skip ? Math.min(120, out) : out;
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { box.style.animationDuration = `${wipe}ms`; dim.style.transitionDuration = `${wipe}ms`; } // the wipe runs as long as it is given
   box.classList.add('out'); dim.classList.remove('in'); await sleep(wipe);
-  cancelAnimationFrame(raf); box.remove(); dim.remove(); removeEventListener('keydown', onKey, true);
+  cancelAnimationFrame(raf); box.remove(); dim.remove();
+  removeEventListener('keydown', onKey, true); removeEventListener('pointerdown', onDown, true);
   return true;
 }
 // Load a scene and draw it at time t onto a canvas (previews and checks).

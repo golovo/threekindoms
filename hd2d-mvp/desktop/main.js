@@ -319,7 +319,7 @@ function watchDiag(win) {
     }
     misses = 0;
     if (!s) return;
-    const key = JSON.stringify([s.screen, s.g?.year, s.g?.month, s.g?.turn, s.g?.books, s.g?.over, s.dialogs, s.hidden, s.focus]);
+    const key = JSON.stringify([s.screen, s.g?.year, s.g?.month, s.g?.turn, s.g?.books, s.g?.over, s.dialogs, s.hidden, s.focus, s.vig, s.shade]);
     if (key !== lastKey) { lastKey = key; diag(`[state] ${key}`); }
     // Only while the player has the window in front: a background window may stop drawing by design.
     if (s.sinceFrame > 5000 && s.focus && !s.hidden && Date.now() - lastStall > 5000) {

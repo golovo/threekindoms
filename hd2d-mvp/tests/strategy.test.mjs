@@ -306,16 +306,15 @@ test('pointing at a stepped-up city tag lights it and nothing moves', async () =
   await page.setViewportSize({ width: 1280, height: 800 });
 });
 
-// ☰ 系统 → 读取记录 loads a record in the middle of a campaign (feedback T05, 2026-10-30): the page starts over
-// (?mute kept) and opens that record on the strategy map. Run before the war test, which leaves the page in a war.
-test('读取记录 from the system menu opens a record mid-campaign', async () => {
+// 读档 (top right, under 系统) loads a record in the middle of a campaign (feedback T05, 2026-10-30): the page starts
+// over (?mute kept) and opens that record on the strategy map. Run before the war test, which leaves the page in a war.
+test('读档 opens a record mid-campaign', async () => {
   const home = await page.evaluate(() => {
     const { g, G } = window.__game, c = g.cities[g.factions[g.player].city];
     const gold = c.gold; c.gold = 4321; G.save(g, 7); c.gold = gold;
     return c.id;
   });
-  await page.click('.sysmenu-btn');
-  await page.locator('.sysmenu-list button', { hasText: '读取记录' }).click();
+  await page.locator('.sysquicks button', { hasText: '读档' }).click();
   await page.locator('.shade .slot', { hasText: '记录七' }).click();
   await Promise.all([page.waitForEvent('load', { timeout: 30000 }), page.locator('.shade .btn.primary', { hasText: '确定' }).click()]);
   await page.waitForFunction(() => window.__game?.g && document.body.dataset.screen === 'strategy', null, { timeout: 60000 });

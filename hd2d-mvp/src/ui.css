@@ -535,6 +535,8 @@ body.cine .msg { bottom: calc(9vh + 16px); } /* above the letterbox */
 body.cine .citypanel, body.cine .logbox, body.cine .warcards, body.cine .wardock, body.cine .warbar, body.cine .sysbtns, body.cine .deploybtn { display: none; }
 .sysbtns { --sys-top: 12px; position: fixed; top: var(--sys-top); right: 12px; max-width: calc(100vw - 24px); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 6; }
 .sysbtns .btn { padding: 4px 10px; font-size: 14px; }
+.sysrow { display: flex; align-items: center; gap: 4px; }
+.sysbtns .sysquick { min-width: 52px; padding: 4px 10px; text-align: center; }
 .sysmenu-list { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; padding: 6px; border-radius: 6px; background: var(--menu-bg); border: 1px solid rgba(220,180,110,.25); box-shadow: 0 10px 28px rgba(0,0,0,.5);
   /* Under the 系统 button and 12px clear of the window's bottom. Both columns fit from the desktop's 1024x600 up; a smaller browser window stacks them and scrolls. */
   max-width: 100%; max-height: calc(100vh - var(--sys-top) - 50px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--gold2) transparent; }

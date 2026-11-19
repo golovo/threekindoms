@@ -73,10 +73,10 @@ test('on the title every row is in the window', async () => {
   await everySize(await (async () => { await openMenu(); return page.locator(ROWS).count(); })());
 });
 
-test('on the strategy map all 26 rows can be clicked at every window size', async () => {
+test('on the strategy map all 24 rows can be clicked at every window size', async () => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await newCampaign(page, '曹操');
-  await everySize(26);
+  await everySize(24);
   await tabThroughSmallWindow();
   await page.setViewportSize({ width: 1600, height: 900 });
 });

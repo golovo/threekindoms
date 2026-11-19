@@ -889,7 +889,7 @@ function help() {
   return modal('说明', (close) => [h('div', { class: 'help' },
     h('h4', {}, '操作'), controls({ input: pad.active ? 'pad' : PHONE ? 'touch' : 'keys', touch: PHONE, family: pad.family, east: pad.confirm === 'east', label: padKey }),
     h('h4', {}, '战略'), h('p', {}, '一个势力行动一轮为一个月。每月按占城数发放命令书（1–3城3张……28–30城13张），点击己方城市，在下方菜单下令；命令书用完即结束本月。4月收税金，10月收米；统治度低于50易生暴乱；5–6月洪水、8–9月旱灾，防灾可减损。'),
-    h('p', {}, '武将到史实卒年后一年比一年易病逝；开局或「☰ 系统」可选「武将不老」，「武将不战死」（体力归零改为被俘，体力回复至30；君主照常阵亡），「三顾模式」（同一位人才在该城至多搜索3次必定出仕），「武将不能读书」（敌我都不能入学问所提高智力），以及「免费记录」（存档不消耗命令书）。进度不会自动保存：城市菜单「城 → 记录」或「☰ 系统 → 记录进度」存入八个记录位置之一（消耗一张命令书，免费记录除外），「☰ 系统 → 读取记录」或标题画面读取。战争中可「☰ 系统 → 中断战斗」回到标题，之后从标题「继续战斗」接着打（不占记录位置，只能继续一次）。'),
+    h('p', {}, '武将到史实卒年后一年比一年易病逝；开局或「☰ 系统」可选「武将不老」，「武将不战死」（体力归零改为被俘，体力回复至30；君主照常阵亡），「三顾模式」（同一位人才在该城至多搜索3次必定出仕），「武将不能读书」（敌我都不能入学问所提高智力），以及「免费记录」（存档不消耗命令书）。进度不会自动保存：城市菜单「录」或右上角「存档」存入八个记录位置之一（消耗一张命令书，免费记录除外），右上角「读档」或标题画面读取。战争中可「☰ 系统 → 中断战斗」回到标题，之后从标题「继续战斗」接着打（不占记录位置，只能继续一次）。'),
     h('p', {}, `快捷存档（${quickSaveKey}）另有一个位置，不占八个普通记录；与普通记录一样，默认消耗一张命令书，开启免费记录后不消耗。己方回合的战略地图可存档，F8 快捷读档；在我军回合的战场读取会放弃当前战斗。快捷记录可以反复读取，不是只能继续一次的战场中断。`),
     h('p', {}, '武将不会自然回复体力、也不会自然增加忠诚，需靠病院与赏赐。每将最多带1000兵，征兵每百人20金，再用「分兵」分配。'),
     h('h4', {}, '战争'), h('p', {}, '出阵时选武将、总大将并携带金米。攻方先行动，机动力全军共用，按总兵数每天恢复。金色轮廓围出的范围可移动（指向其中一格会画出行军箭头和消耗）、橙框为城、四角红框的敌将可攻击（2机动力）、四角紫框为计略目标；按住 R（3D 战场也可点右下的「威」）显示敌军威胁范围（红色斜纹：敌军下次行动时任何一名敌将单独能打到的格子，指着敌将只看他一人）；[ 和 ] 切换我方武将；点名牌等于点这名武将，被山挡住的武将点他的剪影；选了计略后镜头会移到目标处，也可以直接在目标名单里点名字；拖动可平移。攻方踏上城格即胜；总大将阵亡/被俘/退却即败；30日未决或米尽则败。'),
@@ -1027,11 +1027,8 @@ function sysButtons() {
     g ? item(() => `记录消耗 ${g.freeSave ? '免费' : '原版'}`, (b) => { g.freeSave = !g.freeSave; b.textContent = `记录消耗 ${g.freeSave ? '免费' : '原版'}`; markFreeSave(); },
       '原版：每次记录消耗一张命令书　免费：记录不消耗命令书。随本局记录保存') : '',
     ), group('记录',
-    g ? item(() => '记录进度', (b) => { const why = saveBlocked(); if (why) return toast(`<em>${why}</em>`, 3500); close(); runCommand(saveCity(), '记录'); },
-      '进度不会自动保存。在八个记录位置之一保存当前进度（消耗一张命令书，开启免费记录时不消耗；与城市菜单「城 → 记录」相同；己方回合、战略地图上可用）') : '',
     g && inWar() ? item(() => '中断战斗', () => { close(); suspendWar(); },
       '保存这场战斗的进行状态并回到标题，之后在标题画面「继续战斗」从此处接着打。不占记录位置、不消耗命令书；继续时取出，只能继续一次。己方回合、无动作进行时可用') : '',
-    g ? item(() => '读取记录', () => { close(); loadRecord(); }, '读取一份记录，从记录的月份接着玩（当前未记录的进度不保留）') : '',
     (g || G.hasQuick()) ? h('div', { class: 'sysmenu-quick' },
       g ? item(() => `快捷存档 ${quickSaveKey}`, () => { close(); quickRecord(); },
         `存入独立的快捷记录，不占八个普通位置；消耗遵循「记录消耗」设置，己方回合、战略地图上可用（${quickSaveKey}）`) : '',
@@ -1048,14 +1045,22 @@ function sysButtons() {
       '修改记录中武将、城市与同盟的数值，或为某份记录打开原版漏洞（阿会喃复制）。改完「写回记录」，回到游戏「读取记录」接着玩') : '',
     PHONE && g ? item(() => '战报', () => { close(); logBook(); }, '最近的战报') : '',
     item(() => '说明', () => { close(); help(); })))), tabs());
+  // 存档／读档 under 系统, out of the menu: they are the two a game is played with (asked for 2026-11-19). The 存档 button
+  // runs the city menu's 记录 (one 命令书, as the original) from wherever the player is on the 战略地图 and says why not
+  // elsewhere; 读档 opens the record picker. Both are built only with a game on: the title has its own 读取记录.
   const wrap = h('div', { class: 'sysbtns' },
-    h('button', { class: 'btn sysmenu-btn', 'aria-haspopup': 'menu', title: '系统（镜头复位、画面、声音、音乐、演出、说明）', onclick: () => { if (list.hidden) { fill(); list.hidden = false; addEventListener('pointerdown', outside, true); } else close(); } }, '☰ 系统', h('kbd', { class: 'pad-only', 'data-glyph': 'start' })),
+    // One row at the top right: 系统 with 存档 and 读档 beside it, so the buttons take one line and never sit on the
+    // roster under them (2026-11-19). The menu opens below the row.
+    h('div', { class: 'sysrow' },
+      g ? h('button', { class: 'btn sysquick', title: '保存当前进度：在八个记录位置之一记录（消耗一张命令书，开启免费记录时不消耗；己方回合、战略地图上可用）', onclick: (e) => { e.stopPropagation(); const why = saveBlocked(); if (why) return toast(`<em>${why}</em>`, 3500); close(); runCommand(saveCity(), '记录'); } }, '存档') : null,
+      g ? h('button', { class: 'btn sysquick', title: '读取一份记录，从记录的月份接着玩（当前未记录的进度不保留）', onclick: (e) => { e.stopPropagation(); close(); loadRecord(); } }, '读档') : null,
+      h('button', { class: 'btn sysmenu-btn', 'aria-haspopup': 'menu', title: '系统（镜头复位、画面、声音、音乐、演出、说明）', onclick: () => { if (list.hidden) { fill(); list.hidden = false; addEventListener('pointerdown', outside, true); } else close(); } }, '☰ 系统', h('kbd', { class: 'pad-only', 'data-glyph': 'start' }))),
     list);
   return wrap;
 }
 // ---------- Records (save slots) ----------
-// 系统 → 记录进度 runs the city menu's 记录 (one 命令书, as the original) from wherever the player is on the 战略地图, and says
-// why not elsewhere (feedback F03, 2026-11-02: players found only 读取 in 系统 and lost their progress closing the window).
+// 存档 (under 系统) runs the city menu's 记录 (one 命令书, as the original) from wherever the player is on the 战略地图, and
+// says why not elsewhere (feedback F03, 2026-11-02: players found only 读取 in 系统 and lost their progress closing the window).
 const inWar = () => !!g && document.body.dataset.screen === 'war';
 const saveCity = () => (sel != null && mineCity(sel) ? sel : g.factions[g.player].city);
 function saveBlocked() {
@@ -1389,7 +1394,7 @@ async function begin(state, loaded, resume = null, { keepSuspend = false, notice
     if (notices.length) toast(`<em>${notices.join('；')}</em>`, 6000);
     await fade(false); // a resumed war fades in on its own field (fieldWar)
   }
-  if (!loaded) await message('出征', `${g.year}年，天下大乱。${name(g.factions[g.player].ruler)}于${cityName(g.factions[g.player].city)}起兵，志在一统三十州。<br>每月君主领取<b>命令书</b>，按占城数发放；用尽即结束本月行动。<br>进度<b>不会自动保存</b>：在己方城市选「城 → 记录」，或「☰ 系统 → 记录进度」存档（消耗一张命令书）。`, g.factions[g.player].ruler);
+  if (!loaded) await message('出征', `${g.year}年，天下大乱。${name(g.factions[g.player].ruler)}于${cityName(g.factions[g.player].city)}起兵，志在一统三十州。<br>每月君主领取<b>命令书</b>，按占城数发放；用尽即结束本月行动。<br>进度<b>不会自动保存</b>：在己方城市按「录」，或右上角「存档」（消耗一张命令书）。`, g.factions[g.player].ruler);
   if (loaded) g.endTurn = false;
   try { if (resume) await resumeWar(resume); await G.run(g, io); } catch (e) { console.error(e); await message('错误', String(e.stack || e)); }
   await ending();

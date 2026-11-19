@@ -104,8 +104,7 @@ test('F8 can be cancelled; after confirmation it loads the quick record without 
   await idle();
   assert.equal(await page.evaluate(() => { const g = window.__game.g; return g.cities[g.factions[g.player].city].gold; }), 4321);
   assert.equal(await page.evaluate(() => window.__game.g.slot), null);
-  await page.click('.sysmenu-btn');
-  await page.locator('.sysmenu-list button', { hasText: '记录进度' }).click();
+  await page.locator('.sysquicks button', { hasText: '存档' }).click();
   await page.locator('.shade .slot', { hasText: '记录二' }).click();
   await page.locator('.shade .modal', { hasText: '覆盖记录' }).waitFor({ timeout: 4000 });
   await page.keyboard.press('Escape');
@@ -148,8 +147,7 @@ test('a quick record replaced while its overwrite confirmation is open is not si
 test('the quick record is visible at the top of the record picker on a small window', async () => {
   await page.evaluate(() => { const { g, G } = window.__game; G.saveQuick(g); G.save(g, 1); });
   await page.setViewportSize({ width: 1024, height: 600 });
-  await page.click('.sysmenu-btn');
-  await page.locator('.sysmenu-list button', { hasText: '读取记录' }).click();
+  await page.locator('.sysquicks button', { hasText: '读档' }).click();
   const quick = page.locator('.shade .slot').first();
   assert.match(await quick.innerText(), /快捷存档/);
   const onScreen = await quick.evaluate((el) => { const r = el.getBoundingClientRect(), box = el.closest('.modal').getBoundingClientRect(); return r.top >= box.top && r.bottom <= box.bottom; });
@@ -378,14 +376,14 @@ test('a numbered record replaced during reload is not treated as the current sav
         return set.call(this, k, v);
       };
     });
-    await p.click('.sysmenu-btn'); await p.locator('.sysmenu-list button', { hasText: '读取记录' }).click();
+    await p.locator('.sysquicks button', { hasText: '读档' }).click();
     await p.locator('.shade .slot', { hasText: '记录一' }).click();
     await Promise.all([p.waitForEvent('load', { timeout: 30000 }), p.locator('.shade .btn.primary').click()]);
     await p.waitForFunction(() => { const g = window.__game?.g; return document.body.dataset.screen === 'strategy' && g && g.current === g.player && document.querySelector('.citypanel') && !document.querySelector('.banner, .panel.msg, .shade, #fade.on, .vig'); }, null, { timeout: 20000 })
       .catch(async (error) => { throw new Error(`${error.message}\n${JSON.stringify(await p.evaluate(() => { const g = window.__game?.g; return { screen: document.body.dataset.screen, year: g?.year, current: g?.current, player: g?.player, books: g?.books, over: g?.over, panels: [...document.querySelectorAll('.citypanel, .banner, .panel.msg, .shade, #fade.on, .vig')].map((el) => `${el.className}:${el.textContent.slice(0, 120)}`), pending: !!sessionStorage.getItem('haou-hd2d-load') }; }))}\nerrors: ${JSON.stringify(p.errors)}`); });
     assert.equal(await p.evaluate(() => window.__game.g.year), 199);
     assert.equal(await p.evaluate(() => window.__game.g.slot), null);
-    await p.click('.sysmenu-btn'); await p.locator('.sysmenu-list button', { hasText: '记录进度' }).click();
+    await p.locator('.sysquicks button', { hasText: '存档' }).click();
     await p.locator('.shade .slot', { hasText: '记录一' }).click();
     await p.locator('.shade .modal', { hasText: '覆盖记录' }).waitFor({ timeout: 4000 });
     assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('haou-hd2d-save:1')).year), 200);
